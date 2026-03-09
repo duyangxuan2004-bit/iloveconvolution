@@ -1,0 +1,361 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>情感卷积：恋爱生存模拟器 (完整版)</title>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <style>
+        body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background-color: #f4f7f6; color: #333; max-width: 800px; margin: 0 auto; padding: 20px; }
+        .card { background: white; padding: 20px; border-radius: 12px; box-shadow: 0 4px 12px rgba(0,0,0,0.1); margin-bottom: 20px; text-align: center; }
+        button { background-color: #ff6b6b; color: white; border: none; padding: 12px 24px; font-size: 16px; border-radius: 8px; cursor: pointer; transition: 0.3s; margin: 10px; }
+        button:hover { background-color: #ee5253; }
+        button:disabled { background-color: #ccc; cursor: not-allowed; }
+        #restart-btn { background-color: #0984e3; }
+        #restart-btn:hover { background-color: #74b9ff; }
+        select { padding: 10px; font-size: 16px; border-radius: 8px; margin: 10px; }
+        .score-display { font-size: 48px; font-weight: bold; margin: 10px 0; transition: color 0.3s; }
+        .event-text { font-size: 18px; color: #34495e; min-height: 50px; margin-bottom: 10px; line-height: 1.5; }
+        .charts-container { display: flex; flex-direction: column; gap: 20px; }
+        canvas { background: white; border-radius: 12px; padding: 10px; box-shadow: 0 2px 8px rgba(0,0,0,0.05); }
+        .ending-text { font-size: 22px; font-weight: bold; margin-top: 10px; }
+        .footer { font-size: 12px; color: #999; margin-top: 15px; }
+    </style>
+</head>
+<body>
+
+    <div class="card" id="setup-screen">
+        <h2>💖 恋爱生存模拟器 (情感卷积版)</h2>
+        <p style="font-size:14px; line-height:1.6; color:#555;">
+        就像真实事件里的爱情一样，在这个小游戏中，每天发生的行为会对关系产生影响，但这些影响不会立刻消失，而是随着时间逐渐衰减并持续叠加，影响着爱情的走向。
+        这种“过去影响按权重累积到现在”的过程，在信号处理中被称为<strong>卷积（convolution）</strong>。
+        你很幸运，获得了选择对方“记仇程度”的机会（当然，有好事也会在记忆里按照你选择的天数衰减），但你没法控制和TA在一起的每一天里都会发生什么。
+        看看你的记忆半衰期和运气能把这段感情带向何方吧！
+        </p>
+        <p>选择对方的“记仇程度”（指数衰减半衰期）：</p>
+        <select id="grudge-level">
+            <option value="1">1天 (鱼的记忆，绝不内耗)</option>
+            <option value="3">3天 (正常人的小脾气)</option>
+            <option value="7" selected>7天 (比较记仇，需要长时间哄)</option>
+            <option value="14">14天 (超级天蝎座，翻旧账王者)</option>
+        </select>
+        <br>
+        <button onclick="startSimulation()">开始测试</button>
+        <div class="footer">作者：杜杨轩 南方科技大学地球与空间科学系2022级本科生 ｜ 由 Gemini 辅助开发</div>
+    </div>
+
+    <div id="sim-screen" style="display: none;">
+        <div class="card">
+            <h3 id="day-counter">Day: 0 / 30</h3>
+            <div class="event-text" id="event-display">初始信用分：80<br>满200分白头偕老，跌破0分当场分手。准备好了吗？</div>
+            <div class="score-display" id="score-display" style="color: #2d3436;">80</div>
+            <div>
+                <button id="next-btn" onclick="nextDay()">下一天</button>
+                <button id="restart-btn" onclick="restartSimulation()">重新开始</button>
+            </div>
+        </div>
+
+        <div class="charts-container">
+            <div><canvas id="lineChart"></canvas></div>
+            <div><canvas id="barChart"></canvas></div>
+        </div>
+        <div class="footer" style="text-align:center;">作者：杜杨轩 南方科技大学地球与空间科学系2022级本科生 ｜ 由 Gemini 辅助开发</div>
+    </div>
+
+    <script>
+        // 行为权重库（分为：日常事件 / 爆点事件）
+        const events = [
+            // ===== 日常事件 =====
+            { type: "normal", name: "平平无奇的一天，什么都没发生 😐", impact: 0, weight: 20 },
+            { type: "normal", name: "买了秋天的第一杯奶茶 🧋", impact: 5, weight: 20 },
+            { type: "normal", name: "顺路买了你最爱吃的那家小蛋糕 🍰", impact: 5, weight: 25 },
+            { type: "normal", name: "主动发消息报备行程 📍", impact: 5, weight: 30 },
+            { type: "normal", name: "一起看了一场浪漫电影 🎬", impact: 10, weight: 20 },
+            { type: "normal", name: "做了一桌好菜，精心准备了烛光晚餐 🕯️", impact: 20, weight: 20 },
+            { type: "normal", name: "一起散步聊天到很晚 🌙", impact: 5, weight: 25 },
+            { type: "normal", name: "给你带了早餐 🥐", impact: 5, weight: 25 },
+            { type: "normal", name: "突然夸你今天很好看 ✨", impact: 8, weight: 25 },
+            { type: "normal", name: "一起打游戏快乐开黑 🎮", impact: 5, weight: 20 },
+            { type: "normal", name: "消息轮回，半天不理人 📱", impact: -10, weight: 20 },
+            { type: "normal", name: "因为左脚先迈进门被莫名其妙凶了一顿 🦶", impact: -5, weight: 20 },
+            { type: "normal", name: "约会迟到半小时 ⏰", impact: -15, weight: 20 },
+            { type: "normal", name: "打游戏敷衍不倾听 🎮", impact: -20, weight: 15 },
+            { type: "normal", name: "忘记回消息一整天 📵", impact: -15, weight: 20 },
+            { type: "normal", name: "说话不过脑子惹你生气 😶", impact: -10, weight: 20 },
+            { type: "normal", name: "下班路上给你捎了一束小花 💐", impact: 6, weight: 15 },
+            { type: "normal", name: "记得你随口提过的喜好，悄悄准备了同款零食 🍪", impact: 8, weight: 15 },
+            { type: "normal", name: "帮你拿快递 📦", impact: 5, weight: 24 },
+            { type: "normal", name: "拍照时主动把你P得比本人还好看 📸", impact: 8, weight: 15 },
+            { type: "normal", name: "发现你情绪低落，安静陪着你散了会儿步 🚶", impact: 8, weight: 15 },
+            { type: "normal", name: "把聊天背景偷偷换成了合照 🖼️", impact: 6, weight: 10 },
+            { type: "normal", name: "吃饭时把最后一块肉默默夹给了你 🍖", impact: 5, weight: 15 },
+            { type: "normal", name: "说好五分钟到，结果你在楼下吹了二十分钟风 🌬️", impact: -12, weight: 15 },
+            { type: "normal", name: "一起吃饭时只顾着刷短视频不聊天 📱", impact: -8, weight: 20 },
+            { type: "normal", name: "朋友圈发合照选了最丑的那张 😵", impact: -8, weight: 10 },
+            { type: "normal", name: "问你吃什么你说随便，最后带你去南科大中心食堂 🍱", impact: -15, weight: 15 },
+            { type: "normal", name: "共享耳机时把你最雷的歌手放了出来 🎧", impact: -10, weight: 15 },
+            { type: "normal", name: "路过娃娃机热血上头，夹空了你一顿饭钱 🧸", impact: -10, weight: 10 },
+            { type: "normal", name: "半夜突然emo，把你从睡梦里拉起来分析人生 🌃", impact: -10, weight: 10 },
+
+            // ===== 爆点事件 =====
+            { type: "big", name: "帮你抢到了偶像演唱会门票 🎫", impact: 30, weight: 15 },
+            { type: "big", name: "送了你放在购物车一直舍不得买的东西 🎁", impact: 30, weight: 10 },
+            { type: "big", name: "你生病时第一时间赶来照顾你 🥣", impact: 40, weight: 15 },
+            { type: "big", name: "安排了一次完美的双人游 ✈️", impact: 50, weight: 5 },
+            { type: "big", name: "为你全款拿下顶配iPhone 17 Pro Max 📱", impact: 80, weight: 3 },
+            { type: "big", name: "带你复习《信号处理与数据分析》，助你拿下A+ 💯", impact: 100, weight: 3 },
+            { type: "big", name: "豪掷千金买下一颗小行星的命名权送给你 ☄️", impact: 100, weight: 1 },
+            { type: "big", name: "买彩票中了头奖，第一件事是给你买大别墅 🏡", impact: 100, weight: 1 },
+            { type: "big", name: "忘记了重要纪念日 💔", impact: -40, weight: 5 },
+            { type: "big", name: "听说你生病之后只说了一句“多喝热水” 🌡", impact: -30, weight: 10 },
+            { type: "big", name: "给胖猫点外卖 🐱", impact: -40, weight: 5 },
+            { type: "big", name: "打瓦对着别人叫妈妈 👩🏻", impact: -40, weight: 5 },
+            { type: "big", name: "被抓到深夜看擦边直播 👁️", impact: -50, weight: 10 },
+            { type: "big", name: "被抓到深夜看擦边直播还刷了嘉年华 👁️👄👁", impact: -80, weight: 5 },
+            { type: "big", name: "被抓到出轨！ 💣", impact: -80, weight: 5 },
+            { type: "big", name: "被抓到出轨，对象是你的闺蜜/哥们！！！ 💀", impact: -100, weight: 1 }
+        ];
+
+        let day = 0;
+        let maxDays = 30;
+        let normalStreak = 0; // 连续日常事件计数
+        let windowSize = 7;
+        let baseScore = 80;
+        let historyImpacts = []; 
+        let scoreHistory = [];   
+        
+        let lineChart = null;
+        let barChart = null;
+
+        function buildDailyReviewText(index) {
+            if (index === 0) return "Day 0：初始状态，信用分 80";
+            const event = historyImpacts[index];
+            const score = scoreHistory[index];
+            if (!event) return `Day ${index}：暂无事件记录`;
+            const sign = event.impact > 0 ? "+" : "";
+            return `Day ${index}：${event.name}（影响 ${sign}${event.impact}），当日总分 ${score}`;
+        }
+
+        function getRandomEvent() {
+            const normalEvents = events.filter(e => e.type === "normal");
+            const bigEvents = events.filter(e => e.type === "big");
+
+            // 保底机制：连续4次日常后，第5次强制爆点
+            if (normalStreak >= 4) {
+                normalStreak = 0;
+                return weightedRandom(bigEvents);
+            }
+
+            const event = weightedRandom(events);
+
+            if (event.type === "normal") normalStreak++;
+            else normalStreak = 0;
+
+            return event;
+        }
+
+        function weightedRandom(pool) {
+            let totalWeight = pool.reduce((sum, e) => sum + e.weight, 0);
+            let randomNum = Math.random() * totalWeight;
+            let weightSum = 0;
+
+            for (let e of pool) {
+                weightSum += e.weight;
+                if (randomNum <= weightSum) return e;
+            }
+
+            return pool[0];
+        }
+
+        function calculateConvolvedScore(currentDay) {
+            let sum = 0;
+            for (let i = 1; i <= currentDay; i++) {
+                if (historyImpacts[i]) {
+                    let daysPassed = currentDay - i;
+                    let decayFactor = Math.exp(-daysPassed / (windowSize / 1.5));
+                    sum += historyImpacts[i].impact * decayFactor;
+                }
+            }
+            return Math.round(baseScore + sum); 
+        }
+
+        function startSimulation() {
+            windowSize = parseInt(document.getElementById('grudge-level').value);
+            document.getElementById('setup-screen').style.display = 'none';
+            document.getElementById('sim-screen').style.display = 'block';
+            
+            historyImpacts = [{name: "初始状态", impact: 0}];
+            scoreHistory = [baseScore];
+            initCharts();
+        }
+
+        // 新增的重新开始功能
+        function restartSimulation() {
+            // 1. 重置所有变量
+            day = 0;
+            historyImpacts = [];
+            scoreHistory = [];
+
+            // 2. 销毁旧图表，防止重叠污染
+            if (lineChart) lineChart.destroy();
+            if (barChart) barChart.destroy();
+
+            // 3. 恢复UI初始状态
+            document.getElementById('next-btn').disabled = false;
+            document.getElementById('next-btn').innerText = "下一天";
+            document.getElementById('day-counter').innerText = `Day: 0 / 30`;
+            document.getElementById('event-display').innerHTML = "初始信用分：80<br>满200分白头偕老，跌破0分当场分手。准备好了吗？";
+            document.getElementById('score-display').innerText = "80";
+            document.getElementById('score-display').style.color = "#2d3436";
+
+            // 4. 切回设置页面
+            document.getElementById('sim-screen').style.display = 'none';
+            document.getElementById('setup-screen').style.display = 'block';
+        }
+
+        function nextDay() {
+            day++;
+            let event = getRandomEvent();
+            historyImpacts.push(event);
+
+            let rawScore = calculateConvolvedScore(day);
+            let displayScore = Math.max(0, Math.min(200, rawScore));
+            scoreHistory.push(displayScore);
+
+            let isEnded = false;
+            let endingHTML = "";
+
+            if (displayScore >= 200) {
+                isEnded = true;
+                endingHTML = `<div class="ending-text" style="color:#e84393;">🎉 达成结局：白头偕老！</div>你们的情感分突破天际 (200分)，直接民政局见！`;
+            } else if (displayScore <= 0) {
+                isEnded = true;
+                endingHTML = `<div class="ending-text" style="color:#d63031;">💔 达成结局：再见爱人……</div>情感分跌破谷底 (0分)，这段感情提前杀青了，好聚好散吧。`;
+            } else if (day === maxDays) {
+                isEnded = true;
+                if (displayScore < 60) {
+                    endingHTML = `<div class="ending-text" style="color:#636e72;">🍂 结局：我们都没错，只是不适合……</div>最终得分 ${displayScore} 分。激情褪去，只剩一地鸡毛。`;
+                } else if (displayScore <= 120) {
+                    endingHTML = `<div class="ending-text" style="color:#0984e3;">🤔 结局：再看看…？</div>最终得分 ${displayScore} 分。平平淡淡才是真，凑合过呗，还能离咋地？`;
+                } else {
+                    endingHTML = `<div class="ending-text" style="color:#00b894;">🥰 结局：模范情侣！</div>最终得分 ${displayScore} 分。你们是令人羡慕的一对，继续保持！`;
+                }
+            }
+
+            updateUI(event, displayScore, isEnded, endingHTML);
+            updateCharts(isEnded);
+
+            if (isEnded) {
+                document.getElementById('next-btn').disabled = true;
+                document.getElementById('next-btn').innerText = "模拟结束：查看全局复盘";
+            }
+        }
+
+        function updateUI(event, score, isEnded, endingHTML) {
+            document.getElementById('day-counter').innerText = `Day: ${day} / ${maxDays}`;
+            
+            let color = event.impact > 0 ? "#00b894" : (event.impact < 0 ? "#d63031" : "#636e72");
+            let sign = event.impact > 0 ? "+" : "";
+            
+            let htmlStr = `今天：${event.name} <span style="color:${color}; font-weight:bold;">(${sign}${event.impact})</span>`;
+            
+            if (isEnded) {
+                htmlStr += `<hr>${endingHTML}<br><span style="font-size:14px; color:#b2bec3;">⬇️ 图表已展开为全局视图</span>`;
+            }
+            
+            document.getElementById('event-display').innerHTML = htmlStr;
+            
+            let scoreEl = document.getElementById('score-display');
+            scoreEl.innerText = score;
+            if (score >= 120) scoreEl.style.color = "#00b894";
+            else if (score < 60) scoreEl.style.color = "#d63031";
+            else scoreEl.style.color = "#2d3436";
+        }
+
+        function initCharts() {
+            const ctxLine = document.getElementById('lineChart').getContext('2d');
+            lineChart = new Chart(ctxLine, {
+                type: 'line',
+                data: {
+                    labels: ['Day 0'],
+                    datasets: [{
+                        label: '实时总分 (局部视图)',
+                        data: [baseScore],
+                        borderColor: '#0984e3',
+                        backgroundColor: 'rgba(9, 132, 227, 0.2)',
+                        fill: true,
+                        tension: 0.4,
+                        pointRadius: 5,
+                        pointHoverRadius: 7
+                    }]
+                },
+                options: { 
+                    responsive: true,
+                    scales: { y: { min: 0, max: 200 } },
+                    animation: { duration: 400 },
+                    plugins: {
+                        tooltip: {
+                            callbacks: {
+                                title: function(context) {
+                                    return context[0].label;
+                                },
+                                label: function(context) {
+                                    return buildDailyReviewText(context.dataIndex);
+                                }
+                            }
+                        }
+                    }
+                }
+            });
+
+            const ctxBar = document.getElementById('barChart').getContext('2d');
+            barChart = new Chart(ctxBar, {
+                type: 'bar',
+                data: {
+                    labels: ['Day 0'],
+                    datasets: [{
+                        label: '单日行为得分 (输入脉冲)',
+                        data: [0],
+                        backgroundColor: ['#b2bec3']
+                    }]
+                },
+                options: { 
+                    responsive: true,
+                    scales: { y: { suggestedMin: -100, suggestedMax: 100 } },
+                    animation: { duration: 400 },
+                    plugins: {
+                        tooltip: {
+                            callbacks: {
+                                title: function(context) {
+                                    return context[0].label;
+                                },
+                                label: function(context) {
+                                    return buildDailyReviewText(context.dataIndex);
+                                }
+                            }
+                        }
+                    }
+                }
+            });
+        }
+
+        function updateCharts(isEnded) {
+            let startIdx = isEnded ? 0 : Math.max(0, day - 3);
+            
+            let displayLabels = Array.from({length: day - startIdx + 1}, (_, i) => `Day ${startIdx + i}`);
+            let displayScores = scoreHistory.slice(startIdx);
+            let displayImpacts = historyImpacts.slice(startIdx).map(e => e.impact);
+            
+            if (isEnded) lineChart.data.datasets[0].label = '全局总分趋势复盘 (指数衰减曲线)';
+            lineChart.data.labels = displayLabels;
+            lineChart.data.datasets[0].data = displayScores;
+            lineChart.update();
+
+            barChart.data.labels = displayLabels;
+            barChart.data.datasets[0].data = displayImpacts;
+            barChart.data.datasets[0].backgroundColor = displayImpacts.map(val => val > 0 ? '#00b894' : (val < 0 ? '#ff7675' : '#dfe6e9'));
+            barChart.update();
+        }
+    </script>
+</body>
+</html>
