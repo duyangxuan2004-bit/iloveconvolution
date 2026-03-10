@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>情感卷积：恋爱生存模拟器 (完整版)</title>
+    <title>情感卷积：恋爱生存模拟器</title>
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <script id="MathJax-script" async src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js"></script>
     <style>
@@ -47,12 +47,12 @@
 
         <div class="preview-container">
             <div class="preview-box">
-                <p><strong>1. 选择对方的“记仇程度”：</strong></p>
+                <p><strong>1. 选择你的“记仇程度”：</strong></p>
                 <select id="grudge-level" onchange="updateImpulsePreview()">
                     <option value="1">1天 (鱼的记忆，绝不内耗)</option>
-                    <option value="3">3天 (正常人的小脾气)</option>
-                    <option value="7" selected>7天 (比较记仇，需要长时间哄)</option>
-                    <option value="14">14天 (超级天蝎座，翻旧账王者)</option>
+                    <option value="3">3天 (小脾气)</option>
+                    <option value="7" selected>7天 (需要长时间哄)</option>
+                    <option value="14">14天 (翻旧账王者)</option>
                 </select>
                 <div class="formula-box">
                     当前衰减核 \(h[t] = e^{-t / (\tau / 1.5)}\)<br>
@@ -159,17 +159,17 @@
 
             // ===== 分手边缘限定事件 (Score < 50) =====
             { type: "big", limit: "low", name: "TA 策划了一场走心的周年惊喜，试图挽回这段冰冷的感情 ❤️", impact: 50, weight: 0 }, // 激活时权重50
-            { type: "big", limit: "low", name: "你大病一场，TA 守在床边三天三夜，哭着求你不要走 🏥", impact: 60, weight: 0 },
+            { type: "big", limit: "low", name: "你大病一场，TA 守在床边三天三夜，哭着求你不要走 🏥", impact: 90, weight: 0 },
             { type: "big", limit: "low", name: "你发现 TA 居然一直在偷偷帮你还你还没敢开口的欠款 🏦", impact: 60, weight: 0 },
             { type: "big", limit: "low", name: "不小心翻到 TA 和白月光的聊天，发现 TA 想转移财产后离婚远走高飞 💀", impact: -100, weight: 0 },
             { type: "big", limit: "low", name: "你们偶然路过初次见面的地方，那些美好的回忆瞬间击中了 TA 🍂", impact: 30, weight: 0 },
 
             // ===== 长久边缘限定事件 (Score > 150) =====
             { type: "big", limit: "high", name: "TA 突然当众向你求婚，在所有人的见证下承诺余生 💍", impact: 50, weight: 0 },
-            { type: "big", limit: "high", name: "双方父母正式见面，相谈甚欢，甚至开始选婚庆日子了 👨‍👩‍👧‍👦", impact: 40, weight: 0 },
+            { type: "big", limit: "high", name: "双方父母正式见面，相谈甚欢，甚至开始选婚庆日子了 👨‍👩‍👧‍👦", impact: 30, weight: 0 },
             { type: "big", limit: "high", name: "在白头偕老的边缘，TA 突然说：'其实我还是忘不了那个 TA'... 💔", impact: -100, weight: 0 },
             { type: "big", limit: "high", name: "TA 把你们共同攒下的婚后生活小金库拿去投资NFT亏得血本无归 💸", impact: -50, weight: 0 },
-            { type: "big", limit: "high", name: "在民政局门口，TA 突然因为一点小事跟你大吵一架并闹着要取消领证 😵", impact: -50, weight: 0 }
+            { type: "big", limit: "high", name: "在民政局门口，TA 突然因为一点小事跟你大吵一架 😵", impact: -80, weight: 0 }
         ];
 
         let day = 0;
