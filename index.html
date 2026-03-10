@@ -20,6 +20,10 @@
         canvas { background: white; border-radius: 12px; padding: 10px; box-shadow: 0 2px 8px rgba(0,0,0,0.05); }
         .ending-text { font-size: 22px; font-weight: bold; margin-top: 10px; }
         .footer { font-size: 12px; color: #999; margin-top: 15px; }
+        .toggle-row { margin-top: 12px; font-size: 14px; color: #555; }
+        .toggle-row label { cursor: pointer; user-select: none; }
+        .toggle-row input[type="checkbox"] { margin-right: 6px; transform: scale(1.1); }
+        .countdown-text { margin-top: 8px; font-size: 13px; color: #888; min-height: 20px; }
     </style>
 </head>
 <body>
@@ -39,6 +43,9 @@
             <option value="7" selected>7天 (比较记仇，需要长时间哄)</option>
             <option value="14">14天 (超级天蝎座，翻旧账王者)</option>
         </select>
+        <div class="toggle-row">
+            <label><input type="checkbox" id="auto-play-toggle">开启自动推进（5秒无操作自动进入下一天）</label>
+        </div>
         <br>
         <button onclick="startSimulation()">开始测试</button>
         <div class="footer">作者：杜杨轩 南方科技大学地球与空间科学系2022级本科生 ｜ 由 Gemini 辅助开发</div>
@@ -53,6 +60,10 @@
                 <button id="next-btn" onclick="nextDay()">下一天</button>
                 <button id="restart-btn" onclick="restartSimulation()">重新开始</button>
             </div>
+        <div class="toggle-row">
+            <label><input type="checkbox" id="auto-play-toggle-sim">开启自动推进（5秒无操作自动进入下一天）</label>
+        </div>
+        <div class="countdown-text" id="countdown-display"></div>
         </div>
 
         <div class="charts-container">
@@ -110,9 +121,9 @@
             { type: "big", name: "听说你生病之后只说了一句“多喝热水” 🌡", impact: -30, weight: 10 },
             { type: "big", name: "给胖猫点外卖 🐱", impact: -40, weight: 5 },
             { type: "big", name: "打瓦对着别人叫妈妈 👩🏻", impact: -40, weight: 5 },
-            { type: "big", name: "被抓到深夜看擦边直播 👁️", impact: -50, weight: 10 },
-            { type: "big", name: "被抓到深夜看擦边直播还刷了嘉年华 👁️👄👁", impact: -80, weight: 5 },
-            { type: "big", name: "被抓到出轨！ 💣", impact: -80, weight: 5 },
+            { type: "big", name: "被抓到深夜看擦边直播 👁️", impact: -50, weight: 5 },
+            { type: "big", name: "被抓到深夜看擦边直播还刷了嘉年华 👁️👄👁", impact: -80, weight: 3 },
+            { type: "big", name: "被抓到出轨！ 💣", impact: -80, weight: 3 },
             { type: "big", name: "被抓到出轨，对象是你的闺蜜/哥们！！！ 💀", impact: -100, weight: 1 }
         ];
 
@@ -126,6 +137,10 @@
         
         let lineChart = null;
         let barChart = null;
+        let autoPlayEnabled = false;
+        let autoAdvanceTimer = null;
+        let autoAdvanceCountdownInterval = null;
+        let autoAdvanceSecondsLeft = 5;
 
         function buildDailyReviewText(index) {
             if (index === 0) return "Day 0：初始状态，信用分 80";
@@ -134,6 +149,73 @@
             if (!event) return `Day ${index}：暂无事件记录`;
             const sign = event.impact > 0 ? "+" : "";
             return `Day ${index}：${event.name}（影响 ${sign}${event.impact}），当日总分 ${score}`;
+        }
+
+        function syncAutoPlayToggles() {
+            const setupToggle = document.getElementById('auto-play-toggle');
+            const simToggle = document.getElementById('auto-play-toggle-sim');
+            if (setupToggle) setupToggle.checked = autoPlayEnabled;
+            if (simToggle) simToggle.checked = autoPlayEnabled;
+        }
+
+        function handleAutoPlayToggle(enabled) {
+            autoPlayEnabled = enabled;
+            syncAutoPlayToggles();
+            scheduleAutoAdvance();
+        }
+
+        function clearAutoAdvanceTimer() {
+            if (autoAdvanceTimer) {
+                clearTimeout(autoAdvanceTimer);
+                autoAdvanceTimer = null;
+            }
+            if (autoAdvanceCountdownInterval) {
+                clearInterval(autoAdvanceCountdownInterval);
+                autoAdvanceCountdownInterval = null;
+            }
+            autoAdvanceSecondsLeft = 5;
+            updateCountdownDisplay();
+        }
+
+        function updateCountdownDisplay() {
+            const countdownEl = document.getElementById('countdown-display');
+            const simScreen = document.getElementById('sim-screen');
+            const nextBtn = document.getElementById('next-btn');
+            const isSimVisible = simScreen && simScreen.style.display !== 'none';
+
+            if (!countdownEl) return;
+
+            if (!autoPlayEnabled || !isSimVisible || !nextBtn || nextBtn.disabled) {
+                countdownEl.innerText = "";
+                return;
+            }
+
+            countdownEl.innerText = `自动推进倒计时：${autoAdvanceSecondsLeft} 秒`;
+        }
+
+        function scheduleAutoAdvance() {
+            clearAutoAdvanceTimer();
+
+            const simScreen = document.getElementById('sim-screen');
+            const nextBtn = document.getElementById('next-btn');
+            const isSimVisible = simScreen && simScreen.style.display !== 'none';
+
+            if (!autoPlayEnabled || !isSimVisible || !nextBtn || nextBtn.disabled) return;
+
+            autoAdvanceSecondsLeft = 5;
+            updateCountdownDisplay();
+
+            autoAdvanceCountdownInterval = setInterval(() => {
+                autoAdvanceSecondsLeft--;
+                if (autoAdvanceSecondsLeft > 0) {
+                    updateCountdownDisplay();
+                }
+            }, 1000);
+
+            autoAdvanceTimer = setTimeout(() => {
+                clearAutoAdvanceTimer();
+                if (autoPlayEnabled && !nextBtn.disabled) nextDay();
+            }, 5000);
         }
 
         function getRandomEvent() {
@@ -181,12 +263,17 @@
 
         function startSimulation() {
             windowSize = parseInt(document.getElementById('grudge-level').value);
+            autoPlayEnabled = document.getElementById('auto-play-toggle').checked;
             document.getElementById('setup-screen').style.display = 'none';
             document.getElementById('sim-screen').style.display = 'block';
             
             historyImpacts = [{name: "初始状态", impact: 0}];
             scoreHistory = [baseScore];
+            normalStreak = 0;
+            syncAutoPlayToggles();
             initCharts();
+            updateCountdownDisplay();
+            scheduleAutoAdvance();
         }
 
         // 新增的重新开始功能
@@ -195,6 +282,8 @@
             day = 0;
             historyImpacts = [];
             scoreHistory = [];
+            normalStreak = 0;
+            clearAutoAdvanceTimer();
 
             // 2. 销毁旧图表，防止重叠污染
             if (lineChart) lineChart.destroy();
@@ -207,13 +296,17 @@
             document.getElementById('event-display').innerHTML = "初始信用分：80<br>满200分白头偕老，跌破0分当场分手。准备好了吗？";
             document.getElementById('score-display').innerText = "80";
             document.getElementById('score-display').style.color = "#2d3436";
+            autoPlayEnabled = document.getElementById('auto-play-toggle').checked;
+            syncAutoPlayToggles();
 
             // 4. 切回设置页面
             document.getElementById('sim-screen').style.display = 'none';
             document.getElementById('setup-screen').style.display = 'block';
+            updateCountdownDisplay();
         }
 
         function nextDay() {
+            clearAutoAdvanceTimer();
             day++;
             let event = getRandomEvent();
             historyImpacts.push(event);
@@ -248,6 +341,9 @@
             if (isEnded) {
                 document.getElementById('next-btn').disabled = true;
                 document.getElementById('next-btn').innerText = "模拟结束：查看全局复盘";
+                clearAutoAdvanceTimer();
+            } else {
+                scheduleAutoAdvance();
             }
         }
 
@@ -356,6 +452,13 @@
             barChart.data.datasets[0].backgroundColor = displayImpacts.map(val => val > 0 ? '#00b894' : (val < 0 ? '#ff7675' : '#dfe6e9'));
             barChart.update();
         }
+        document.getElementById('auto-play-toggle').addEventListener('change', function() {
+            handleAutoPlayToggle(this.checked);
+        });
+
+        document.getElementById('auto-play-toggle-sim').addEventListener('change', function() {
+            handleAutoPlayToggle(this.checked);
+        });
     </script>
 </body>
 </html>
