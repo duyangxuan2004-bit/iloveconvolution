@@ -5,14 +5,17 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>情感卷积：恋爱生存模拟器 (完整版)</title>
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script id="MathJax-script" async src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js"></script>
     <style>
-        body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background-color: #f4f7f6; color: #333; max-width: 800px; margin: 0 auto; padding: 20px; }
+        body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background-color: #f4f7f6; color: #333; max-width: 900px; margin: 0 auto; padding: 20px; }
         .card { background: white; padding: 20px; border-radius: 12px; box-shadow: 0 4px 12px rgba(0,0,0,0.1); margin-bottom: 20px; text-align: center; }
         button { background-color: #ff6b6b; color: white; border: none; padding: 12px 24px; font-size: 16px; border-radius: 8px; cursor: pointer; transition: 0.3s; margin: 10px; }
         button:hover { background-color: #ee5253; }
         button:disabled { background-color: #ccc; cursor: not-allowed; }
         #restart-btn { background-color: #0984e3; }
         #restart-btn:hover { background-color: #74b9ff; }
+        #demo-btn { background-color: #6c5ce7; }
+        #demo-btn:hover { background-color: #a29bfe; }
         select { padding: 10px; font-size: 16px; border-radius: 8px; margin: 10px; }
         .score-display { font-size: 48px; font-weight: bold; margin: 10px 0; transition: color 0.3s; }
         .event-text { font-size: 18px; color: #34495e; min-height: 50px; margin-bottom: 10px; line-height: 1.5; }
@@ -24,30 +27,58 @@
         .toggle-row label { cursor: pointer; user-select: none; }
         .toggle-row input[type="checkbox"] { margin-right: 6px; transform: scale(1.1); }
         .countdown-text { margin-top: 8px; font-size: 13px; color: #888; min-height: 20px; }
+        
+        /* 演示动画相关样式 */
+        .preview-container { display: flex; flex-wrap: wrap; justify-content: space-around; gap: 10px; margin-top: 20px; border-top: 1px dashed #ccc; padding-top: 20px; }
+        .preview-box { flex: 1; min-width: 300px; }
+        .formula-box { background: #fdf2f2; padding: 10px; border-radius: 8px; font-family: 'Courier New', Courier, monospace; font-size: 14px; margin: 10px 0; color: #c0392b; }
     </style>
 </head>
 <body>
 
     <div class="card" id="setup-screen">
         <h2>💖 恋爱生存模拟器 (情感卷积版)</h2>
-        <p style="font-size:14px; line-height:1.6; color:#555;">
-        就像真实事件里的爱情一样，在这个小游戏中，每天发生的行为会对关系产生影响，但这些影响不会立刻消失，而是随着时间逐渐衰减并持续叠加，影响着爱情的走向。
-        这种“过去影响按权重累积到现在”的过程，在信号处理中被称为<strong>卷积（convolution）</strong>。
-        你很幸运，获得了选择对方“记仇程度”的机会（当然，有好事也会在记忆里按照你选择的天数衰减），但你没法控制和TA在一起的每一天里都会发生什么。
-        看看你的记忆半衰期和运气能把这段感情带向何方吧！
+        <p style="font-size:14px; line-height:1.6; color:#555; text-align: left; padding: 0 20px;">
+        就像真实事件里的爱情一样，在这个小游戏中，每天发生的行为会对关系产生影响，但这些影响不会立刻消失，而是随着时间逐渐衰减并持续叠加，影响着爱情的走向。<br>
+        这种“过去影响按权重累积到现在”的过程，在信号处理中被称为<strong>卷积（convolution）</strong>。<br>
+        <strong>公式参考：</strong> \(y[n] = (x * h)[n] = \sum_{k=0}^{n} x[k]h[n-k]\)<br>
+        其中 \(x[k]\) 是第 \(k\) 天发生的事件强度，\(h[n-k]\) 是记忆衰减核（即你选择的“记仇程度”）。
         </p>
-        <p>选择对方的“记仇程度”（指数衰减半衰期）：</p>
-        <select id="grudge-level">
-            <option value="1">1天 (鱼的记忆，绝不内耗)</option>
-            <option value="3">3天 (正常人的小脾气)</option>
-            <option value="7" selected>7天 (比较记仇，需要长时间哄)</option>
-            <option value="14">14天 (超级天蝎座，翻旧账王者)</option>
-        </select>
-        <div class="toggle-row">
-            <label><input type="checkbox" id="auto-play-toggle">开启自动推进（5秒无操作自动进入下一天）</label>
+
+        <div class="preview-container">
+            <div class="preview-box">
+                <p><strong>1. 选择对方的“记仇程度”：</strong></p>
+                <select id="grudge-level" onchange="updateImpulsePreview()">
+                    <option value="1">1天 (鱼的记忆，绝不内耗)</option>
+                    <option value="3">3天 (正常人的小脾气)</option>
+                    <option value="7" selected>7天 (比较记仇，需要长时间哄)</option>
+                    <option value="14">14天 (超级天蝎座，翻旧账王者)</option>
+                </select>
+                <div class="formula-box">
+                    当前衰减核 \(h[t] = e^{-t / (\tau / 1.5)}\)<br>
+                    (表现为右侧的指数衰减曲线)
+                </div>
+                <div class="toggle-row">
+                    <label><input type="checkbox" id="auto-play-toggle">开启自动推进（5秒自动进入下一天）</label>
+                </div>
+                <button onclick="startSimulation()" style="width: 80%;">开始正式测试</button>
+            </div>
+            
+            <div class="preview-box">
+                <canvas id="previewChart" height="180"></canvas>
+                <p style="font-size:12px; color:#666;">单位脉冲响应 \(h[t]\)：即“今天发生的一件事在未来每一天的残余影响”</p>
+            </div>
         </div>
-        <br>
-        <button onclick="startSimulation()">开始测试</button>
+
+        <div id="demo-area" style="margin-top:20px; padding-top:20px; border-top: 1px dashed #ccc;">
+            <p><strong>2. 卷积原理直观演示：信号是如何叠加的？</strong></p>
+            <button id="demo-btn" onclick="runConvolutionDemo()">▶ 播放：多信号叠加演示</button>
+            <div style="max-width: 600px; margin: 0 auto;">
+                <canvas id="demoChart" height="250"></canvas>
+            </div>
+            <p id="demo-status" style="font-size:14px; color:#666; margin-top:5px;">点击按钮查看：两天发生的事件如何共同作用于当下</p>
+        </div>
+
         <div class="footer">作者：杜杨轩 南方科技大学地球与空间科学系2022级本科生 ｜ 由 Gemini 辅助开发</div>
     </div>
 
@@ -124,7 +155,21 @@
             { type: "big", name: "被抓到深夜看擦边直播 👁️", impact: -50, weight: 5 },
             { type: "big", name: "被抓到深夜看擦边直播还刷了嘉年华 👁️👄👁", impact: -80, weight: 3 },
             { type: "big", name: "被抓到出轨！ 💣", impact: -80, weight: 3 },
-            { type: "big", name: "被抓到出轨，对象是你的闺蜜/哥们！！！ 💀", impact: -100, weight: 1 }
+            { type: "big", name: "被抓到出轨，对象是你的闺蜜/哥们！！！ 💀", impact: -100, weight: 1 },
+
+            // ===== 分手边缘限定事件 (Score < 50) =====
+            { type: "big", limit: "low", name: "TA 策划了一场走心的周年惊喜，试图挽回这段冰冷的感情 ❤️", impact: 50, weight: 0 }, // 激活时权重50
+            { type: "big", limit: "low", name: "你大病一场，TA 守在床边三天三夜，哭着求你不要走 🏥", impact: 60, weight: 0 },
+            { type: "big", limit: "low", name: "你发现 TA 居然一直在偷偷帮你还你还没敢开口的欠款 🏦", impact: 60, weight: 0 },
+            { type: "big", limit: "low", name: "不小心翻到 TA 和白月光的聊天，发现 TA 想转移财产后离婚远走高飞 💀", impact: -100, weight: 0 },
+            { type: "big", limit: "low", name: "你们偶然路过初次见面的地方，那些美好的回忆瞬间击中了 TA 🍂", impact: 30, weight: 0 },
+
+            // ===== 长久边缘限定事件 (Score > 150) =====
+            { type: "big", limit: "high", name: "TA 突然当众向你求婚，在所有人的见证下承诺余生 💍", impact: 50, weight: 0 },
+            { type: "big", limit: "high", name: "双方父母正式见面，相谈甚欢，甚至开始选婚庆日子了 👨‍👩‍👧‍👦", impact: 40, weight: 0 },
+            { type: "big", limit: "high", name: "在白头偕老的边缘，TA 突然说：'其实我还是忘不了那个 TA'... 💔", impact: -100, weight: 0 },
+            { type: "big", limit: "high", name: "TA 把你们共同攒下的婚后生活小金库拿去投资NFT亏得血本无归 💸", impact: -50, weight: 0 },
+            { type: "big", limit: "high", name: "在民政局门口，TA 突然因为一点小事跟你大吵一架并闹着要取消领证 😵", impact: -50, weight: 0 }
         ];
 
         let day = 0;
@@ -137,10 +182,111 @@
         
         let lineChart = null;
         let barChart = null;
+        let previewChart = null;
+        let demoChart = null;
         let autoPlayEnabled = false;
         let autoAdvanceTimer = null;
         let autoAdvanceCountdownInterval = null;
         let autoAdvanceSecondsLeft = 5;
+
+        // --- 首页预览与演示逻辑 ---
+        
+        function initPreviewChart() {
+            const ctx = document.getElementById('previewChart').getContext('2d');
+            previewChart = new Chart(ctx, {
+                type: 'line',
+                data: {
+                    labels: Array.from({length: 15}, (_, i) => `+${i}d`),
+                    datasets: [{
+                        label: '记忆残余影响 h[t]',
+                        data: [],
+                        borderColor: '#ff7675',
+                        backgroundColor: 'rgba(255, 118, 117, 0.1)',
+                        fill: true,
+                        tension: 0.4
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    scales: { y: { min: 0, max: 1.1 } },
+                    plugins: { legend: { display: false } }
+                }
+            });
+            updateImpulsePreview();
+        }
+
+        function updateImpulsePreview() {
+            const tau = parseInt(document.getElementById('grudge-level').value);
+            const data = [];
+            for (let t = 0; t < 15; t++) {
+                data.push(Math.exp(-t / (tau / 1.5)));
+            }
+            previewChart.data.datasets[0].data = data;
+            previewChart.update();
+        }
+
+        async function runConvolutionDemo() {
+            const btn = document.getElementById('demo-btn');
+            const status = document.getElementById('demo-status');
+            btn.disabled = true;
+            
+            const tau = parseInt(document.getElementById('grudge-level').value);
+            const ctx = document.getElementById('demoChart').getContext('2d');
+            
+            if (demoChart) demoChart.destroy();
+            
+            const labels = Array.from({length: 15}, (_, i) => `Day ${i}`);
+            const impulse1 = new Array(15).fill(0); impulse1[1] = 40; // 第一天事件
+            const impulse2 = new Array(15).fill(0); impulse2[4] = -30; // 第四天事件
+            
+            const decay1 = labels.map((_, t) => t < 1 ? 0 : 40 * Math.exp(-(t-1) / (tau / 1.5)));
+            const decay2 = labels.map((_, t) => t < 4 ? 0 : -30 * Math.exp(-(t-4) / (tau / 1.5)));
+            const sum = decay1.map((v, i) => v + decay2[i]);
+
+            demoChart = new Chart(ctx, {
+                type: 'line',
+                data: {
+                    labels: labels,
+                    datasets: [
+                        { label: '事件1 (+40)', data: impulse1, type: 'bar', backgroundColor: '#55efc4', order: 1 },
+                        { label: '响应1 (衰减中)', data: new Array(15).fill(null), borderColor: '#55efc4', borderDash: [5, 5], fill: false, tension: 0.4, order: 2 },
+                        { label: '事件2 (-30)', data: impulse2, type: 'bar', backgroundColor: '#ff7675', order: 1 },
+                        { label: '响应2 (衰减中)', data: new Array(15).fill(null), borderColor: '#ff7675', borderDash: [5, 5], fill: false, tension: 0.4, order: 2 },
+                        { label: '当下综合得分 y[n]', data: new Array(15).fill(null), borderColor: '#6c5ce7', borderWidth: 3, fill: false, tension: 0.4, order: 0 }
+                    ]
+                },
+                options: {
+                    responsive: true,
+                    scales: { y: { suggestedMin: -40, suggestedMax: 50 } },
+                    animation: { duration: 500 }
+                }
+            });
+
+            const sleep = (ms) => new Promise(r => setTimeout(r, ms));
+
+            status.innerText = "Step 1: 第一天发生了一件开心的事 (+40)...";
+            await sleep(800);
+            demoChart.data.datasets[1].data = decay1;
+            demoChart.update();
+            
+            await sleep(1500);
+            status.innerText = "Step 2: 第四天发生了一件难过的事 (-30)...";
+            await sleep(800);
+            demoChart.data.datasets[3].data = decay2;
+            demoChart.update();
+            
+            await sleep(1500);
+            status.innerText = "Step 3: 卷积叠加！当下的心情是所有历史遗留影响的叠加和...";
+            await sleep(800);
+            demoChart.data.datasets[4].data = sum;
+            demoChart.update();
+            
+            await sleep(2000);
+            status.innerText = "演示完毕。你可以调整“记仇程度”后再次点击播放对比差异。";
+            btn.disabled = false;
+        }
+
+        // --- 原有模拟逻辑 ---
 
         function buildDailyReviewText(index) {
             if (index === 0) return "Day 0：初始状态，信用分 80";
@@ -218,17 +364,23 @@
             }, 5000);
         }
 
-        function getRandomEvent() {
-            const normalEvents = events.filter(e => e.type === "normal");
-            const bigEvents = events.filter(e => e.type === "big");
+        function getRandomEvent(currentScore) {
+            // 构造带动态权重的池
+            const pool = events.map(e => {
+                let w = e.weight;
+                if (e.limit === "low") w = (currentScore < 50) ? 50 : 0;
+                else if (e.limit === "high") w = (currentScore > 150) ? 50 : 0;
+                return { ...e, tempWeight: w };
+            }).filter(e => e.tempWeight > 0);
 
-            // 保底机制：连续4次日常后，第5次强制爆点
+            // 保底机制：连续4次日常后，第5次强制抽取“非日常”事件 (Big 或 Limit)
             if (normalStreak >= 4) {
                 normalStreak = 0;
-                return weightedRandom(bigEvents);
+                const nonNormalPool = pool.filter(e => e.type !== "normal");
+                return weightedRandom(nonNormalPool, "tempWeight");
             }
 
-            const event = weightedRandom(events);
+            const event = weightedRandom(pool, "tempWeight");
 
             if (event.type === "normal") normalStreak++;
             else normalStreak = 0;
@@ -236,13 +388,13 @@
             return event;
         }
 
-        function weightedRandom(pool) {
-            let totalWeight = pool.reduce((sum, e) => sum + e.weight, 0);
+        function weightedRandom(pool, weightKey = "weight") {
+            let totalWeight = pool.reduce((sum, e) => sum + e[weightKey], 0);
             let randomNum = Math.random() * totalWeight;
             let weightSum = 0;
 
             for (let e of pool) {
-                weightSum += e.weight;
+                weightSum += e[weightKey];
                 if (randomNum <= weightSum) return e;
             }
 
@@ -276,20 +428,16 @@
             scheduleAutoAdvance();
         }
 
-        // 新增的重新开始功能
         function restartSimulation() {
-            // 1. 重置所有变量
             day = 0;
             historyImpacts = [];
             scoreHistory = [];
             normalStreak = 0;
             clearAutoAdvanceTimer();
 
-            // 2. 销毁旧图表，防止重叠污染
             if (lineChart) lineChart.destroy();
             if (barChart) barChart.destroy();
 
-            // 3. 恢复UI初始状态
             document.getElementById('next-btn').disabled = false;
             document.getElementById('next-btn').innerText = "下一天";
             document.getElementById('day-counter').innerText = `Day: 0 / 30`;
@@ -299,16 +447,19 @@
             autoPlayEnabled = document.getElementById('auto-play-toggle').checked;
             syncAutoPlayToggles();
 
-            // 4. 切回设置页面
             document.getElementById('sim-screen').style.display = 'none';
             document.getElementById('setup-screen').style.display = 'block';
             updateCountdownDisplay();
+            updateImpulsePreview();
         }
 
         function nextDay() {
             clearAutoAdvanceTimer();
             day++;
-            let event = getRandomEvent();
+            
+            // 获取前一天的分数用于动态抽取
+            let lastScore = scoreHistory[scoreHistory.length - 1];
+            let event = getRandomEvent(lastScore);
             historyImpacts.push(event);
 
             let rawScore = calculateConvolvedScore(day);
@@ -349,18 +500,11 @@
 
         function updateUI(event, score, isEnded, endingHTML) {
             document.getElementById('day-counter').innerText = `Day: ${day} / ${maxDays}`;
-            
             let color = event.impact > 0 ? "#00b894" : (event.impact < 0 ? "#d63031" : "#636e72");
             let sign = event.impact > 0 ? "+" : "";
-            
             let htmlStr = `今天：${event.name} <span style="color:${color}; font-weight:bold;">(${sign}${event.impact})</span>`;
-            
-            if (isEnded) {
-                htmlStr += `<hr>${endingHTML}<br><span style="font-size:14px; color:#b2bec3;">⬇️ 图表已展开为全局视图</span>`;
-            }
-            
+            if (isEnded) htmlStr += `<hr>${endingHTML}<br><span style="font-size:14px; color:#b2bec3;">⬇️ 图表已展开为全局视图</span>`;
             document.getElementById('event-display').innerHTML = htmlStr;
-            
             let scoreEl = document.getElementById('score-display');
             scoreEl.innerText = score;
             if (score >= 120) scoreEl.style.color = "#00b894";
@@ -392,12 +536,8 @@
                     plugins: {
                         tooltip: {
                             callbacks: {
-                                title: function(context) {
-                                    return context[0].label;
-                                },
-                                label: function(context) {
-                                    return buildDailyReviewText(context.dataIndex);
-                                }
+                                title: (c) => c[0].label,
+                                label: (c) => buildDailyReviewText(c.dataIndex)
                             }
                         }
                     }
@@ -409,11 +549,7 @@
                 type: 'bar',
                 data: {
                     labels: ['Day 0'],
-                    datasets: [{
-                        label: '单日行为得分 (输入脉冲)',
-                        data: [0],
-                        backgroundColor: ['#b2bec3']
-                    }]
+                    datasets: [{ label: '单日行为得分 (输入脉冲)', data: [0], backgroundColor: ['#b2bec3'] }]
                 },
                 options: { 
                     responsive: true,
@@ -422,12 +558,8 @@
                     plugins: {
                         tooltip: {
                             callbacks: {
-                                title: function(context) {
-                                    return context[0].label;
-                                },
-                                label: function(context) {
-                                    return buildDailyReviewText(context.dataIndex);
-                                }
+                                title: (c) => c[0].label,
+                                label: (c) => buildDailyReviewText(c.dataIndex)
                             }
                         }
                     }
@@ -437,28 +569,24 @@
 
         function updateCharts(isEnded) {
             let startIdx = isEnded ? 0 : Math.max(0, day - 3);
-            
             let displayLabels = Array.from({length: day - startIdx + 1}, (_, i) => `Day ${startIdx + i}`);
             let displayScores = scoreHistory.slice(startIdx);
             let displayImpacts = historyImpacts.slice(startIdx).map(e => e.impact);
-            
             if (isEnded) lineChart.data.datasets[0].label = '全局总分趋势复盘 (指数衰减曲线)';
             lineChart.data.labels = displayLabels;
             lineChart.data.datasets[0].data = displayScores;
             lineChart.update();
-
             barChart.data.labels = displayLabels;
             barChart.data.datasets[0].data = displayImpacts;
             barChart.data.datasets[0].backgroundColor = displayImpacts.map(val => val > 0 ? '#00b894' : (val < 0 ? '#ff7675' : '#dfe6e9'));
             barChart.update();
         }
-        document.getElementById('auto-play-toggle').addEventListener('change', function() {
-            handleAutoPlayToggle(this.checked);
-        });
 
-        document.getElementById('auto-play-toggle-sim').addEventListener('change', function() {
-            handleAutoPlayToggle(this.checked);
-        });
+        window.onload = () => {
+            initPreviewChart();
+            document.getElementById('auto-play-toggle').addEventListener('change', function() { handleAutoPlayToggle(this.checked); });
+            document.getElementById('auto-play-toggle-sim').addEventListener('change', function() { handleAutoPlayToggle(this.checked); });
+        };
     </script>
 </body>
 </html>
