@@ -47,16 +47,28 @@
 
         <div class="preview-container">
             <div class="preview-box">
-                <p><strong>1. 选择你的“记仇程度”：</strong></p>
-                <select id="grudge-level" onchange="updateImpulsePreview()">
-                    <option value="1">1天 (鱼的记忆，绝不内耗)</option>
-                    <option value="3">3天 (小脾气)</option>
-                    <option value="7" selected>7天 (需要长时间哄)</option>
-                    <option value="14">14天 (翻旧账王者)</option>
-                </select>
+                <p><strong>1. 设定记忆衰减模型：</strong></p>
+                <div style="text-align: left; font-size: 14px; margin-bottom: 10px;">
+                    <label>😊 好事遗忘速度 (线性半衰期)：</label><br>
+                    <select id="pos-decay" onchange="updateImpulsePreview()" style="width: 100%;">
+                        <option value="1">1天 (瞬间清醒)</option>
+                        <option value="3" selected>3天 (能开心几天)</option>
+                        <option value="7">7天 (能开心一礼拜)</option>
+                        <option value="14">14天 (持久的幸福感)</option>
+                    </select>
+                </div>
+                <div style="text-align: left; font-size: 14px;">
+                    <label>😢 坏事记仇时间 (指数半衰期)：</label><br>
+                    <select id="neg-decay" onchange="updateImpulsePreview()" style="width: 100%;">
+                        <option value="1">1天 (鱼的记忆)</option>
+                        <option value="3">3天 (情绪来得快去得快)</option>
+                        <option value="7" selected>7天 (需要很长时间哄)</option>
+                        <option value="14">14天 (这辈子都别想我忘)</option>
+                    </select>
+                </div>
                 <div class="formula-box">
-                    当前衰减核 \(h[t] = e^{-t / (\tau / 1.5)}\)<br>
-                    (表现为右侧的指数衰减曲线)
+                    好事: \(h_+(t) = \max(0, 1 - t/(2T_{1/2}))\)<br>
+                    坏事: \(h_-(t) = (1/2)^{t / T_{1/2}}\)
                 </div>
                 <div class="toggle-row">
                     <label><input type="checkbox" id="auto-play-toggle">开启自动推进（5秒自动进入下一天）</label>
@@ -65,18 +77,18 @@
             </div>
             
             <div class="preview-box">
-                <canvas id="previewChart" height="180"></canvas>
-                <p style="font-size:12px; color:#666;">单位脉冲响应 \(h[t]\)：即“今天发生的一件事在未来每一天的残余影响”</p>
+                <canvas id="previewChart" height="200"></canvas>
+                <p style="font-size:12px; color:#666;">注：在选择的天数（半衰期）处，两条曲线的影响均降为 0.5</p>
             </div>
         </div>
 
         <div id="demo-area" style="margin-top:20px; padding-top:20px; border-top: 1px dashed #ccc;">
-            <p><strong>2. 卷积原理直观演示：信号是如何叠加的？</strong></p>
+            <p><strong>2. 卷积原理直观演示</strong></p>
             <button id="demo-btn" onclick="runConvolutionDemo()">▶ 播放：多信号叠加演示</button>
             <div style="max-width: 600px; margin: 0 auto;">
                 <canvas id="demoChart" height="250"></canvas>
             </div>
-            <p id="demo-status" style="font-size:14px; color:#666; margin-top:5px;">点击按钮查看：两天发生的事件如何共同作用于当下</p>
+            <p id="demo-status" style="font-size:14px; color:#666; margin-top:5px;">点击查看：当“半衰期”相同时，线性与指数衰减的差异</p>
         </div>
 
         <div class="footer">作者：杜杨轩 南方科技大学地球与空间科学系2022级本科生 ｜ 由 Gemini 辅助开发</div>
@@ -174,8 +186,9 @@
 
         let day = 0;
         let maxDays = 30;
-        let normalStreak = 0; // 连续日常事件计数
-        let windowSize = 7;
+        let normalStreak = 0; 
+        let posHalfLife = 3.5; // 好事半衰期
+        let negHalfLife = 3.5; // 坏事半衰期
         let baseScore = 80;
         let historyImpacts = []; 
         let scoreHistory = [];   
@@ -196,32 +209,51 @@
             previewChart = new Chart(ctx, {
                 type: 'line',
                 data: {
-                    labels: Array.from({length: 15}, (_, i) => `+${i}d`),
-                    datasets: [{
-                        label: '记忆残余影响 h[t]',
-                        data: [],
-                        borderColor: '#ff7675',
-                        backgroundColor: 'rgba(255, 118, 117, 0.1)',
-                        fill: true,
-                        tension: 0.4
-                    }]
+                    labels: Array.from({length: 21}, (_, i) => `+${i}d`),
+                    datasets: [
+                        {
+                            label: '好事响应 (线性)',
+                            data: [],
+                            borderColor: '#00b894',
+                            backgroundColor: 'rgba(0, 184, 148, 0.1)',
+                            fill: true,
+                            tension: 0
+                        },
+                        {
+                            label: '坏事响应 (指数)',
+                            data: [],
+                            borderColor: '#ff7675',
+                            backgroundColor: 'rgba(255, 118, 117, 0.1)',
+                            fill: true,
+                            tension: 0.4
+                        }
+                    ]
                 },
                 options: {
                     responsive: true,
                     scales: { y: { min: 0, max: 1.1 } },
-                    plugins: { legend: { display: false } }
+                    plugins: { 
+                        legend: { display: true, labels: { boxWidth: 12 } },
+                        annotation: { /* 可以在此添加垂线表示半衰期点 */ }
+                    }
                 }
             });
             updateImpulsePreview();
         }
 
         function updateImpulsePreview() {
-            const tau = parseInt(document.getElementById('grudge-level').value);
-            const data = [];
-            for (let t = 0; t < 15; t++) {
-                data.push(Math.exp(-t / (tau / 1.5)));
+            const t_pos = parseFloat(document.getElementById('pos-decay').value);
+            const t_neg = parseFloat(document.getElementById('neg-decay').value);
+            const posData = [];
+            const negData = [];
+            for (let t = 0; t <= 20; t++) {
+                // 线性衰减：在 T 时减半 -> 在 2T 时归零
+                posData.push(Math.max(0, 1 - t / (2 * t_pos)));
+                // 指数衰减：(1/2)^(t/T)
+                negData.push(Math.pow(0.5, t / t_neg));
             }
-            previewChart.data.datasets[0].data = data;
+            previewChart.data.datasets[0].data = posData;
+            previewChart.data.datasets[1].data = negData;
             previewChart.update();
         }
 
@@ -230,59 +262,75 @@
             const status = document.getElementById('demo-status');
             btn.disabled = true;
             
-            const tau = parseInt(document.getElementById('grudge-level').value);
+            const t_pos = parseFloat(document.getElementById('pos-decay').value);
+            const t_neg = parseFloat(document.getElementById('neg-decay').value);
             const ctx = document.getElementById('demoChart').getContext('2d');
             
             if (demoChart) demoChart.destroy();
             
             const labels = Array.from({length: 15}, (_, i) => `Day ${i}`);
-            const impulse1 = new Array(15).fill(0); impulse1[1] = 40; // 第一天事件
-            const impulse2 = new Array(15).fill(0); impulse2[4] = -30; // 第四天事件
             
-            const decay1 = labels.map((_, t) => t < 1 ? 0 : 40 * Math.exp(-(t-1) / (tau / 1.5)));
-            const decay2 = labels.map((_, t) => t < 4 ? 0 : -30 * Math.exp(-(t-4) / (tau / 1.5)));
-            const sum = decay1.map((v, i) => v + decay2[i]);
+            // 脉冲定义
+            const impulse1 = new Array(15).fill(0); impulse1[1] = 40; 
+            const impulse2 = new Array(15).fill(0); impulse2[2] = -30;
+            const impulse3 = new Array(15).fill(0); impulse3[3] = 20;
+            
+            // 响应曲线定义
+            const decay1 = labels.map((_, t) => t < 1 ? 0 : 40 * Math.max(0, 1 - (t - 1) / (2 * t_pos)));
+            const decay2 = labels.map((_, t) => t < 2 ? 0 : -30 * Math.pow(0.5, (t - 2) / t_neg));
+            const decay3 = labels.map((_, t) => t < 3 ? 0 : 20 * Math.max(0, 1 - (t - 3) / (2 * t_pos)));
+            
+            const sum = decay1.map((v, i) => v + decay2[i] + decay3[i]);
 
             demoChart = new Chart(ctx, {
                 type: 'line',
                 data: {
                     labels: labels,
                     datasets: [
-                        { label: '事件1 (+40)', data: impulse1, type: 'bar', backgroundColor: '#55efc4', order: 1 },
-                        { label: '响应1 (衰减中)', data: new Array(15).fill(null), borderColor: '#55efc4', borderDash: [5, 5], fill: false, tension: 0.4, order: 2 },
-                        { label: '事件2 (-30)', data: impulse2, type: 'bar', backgroundColor: '#ff7675', order: 1 },
-                        { label: '响应2 (衰减中)', data: new Array(15).fill(null), borderColor: '#ff7675', borderDash: [5, 5], fill: false, tension: 0.4, order: 2 },
-                        { label: '当下综合得分 y[n]', data: new Array(15).fill(null), borderColor: '#6c5ce7', borderWidth: 3, fill: false, tension: 0.4, order: 0 }
+                        { label: '信号1 (+40)', data: impulse1, type: 'bar', backgroundColor: 'rgba(85, 239, 196, 0.6)', order: 1 },
+                        { label: '响应1 (线性)', data: new Array(15).fill(null), borderColor: '#55efc4', borderDash: [5, 5], fill: false, tension: 0, order: 2 },
+                        { label: '信号2 (-30)', data: impulse2, type: 'bar', backgroundColor: 'rgba(255, 118, 117, 0.6)', order: 1 },
+                        { label: '响应2 (指数)', data: new Array(15).fill(null), borderColor: '#ff7675', borderDash: [5, 5], fill: false, tension: 0.4, order: 2 },
+                        { label: '信号3 (+20)', data: impulse3, type: 'bar', backgroundColor: 'rgba(129, 236, 236, 0.6)', order: 1 },
+                        { label: '响应3 (线性)', data: new Array(15).fill(null), borderColor: '#81ecec', borderDash: [5, 5], fill: false, tension: 0, order: 2 },
+                        { label: '卷积结果 y[n]', data: new Array(15).fill(null), borderColor: '#6c5ce7', borderWidth: 3, fill: false, tension: 0.4, order: 0 }
                     ]
                 },
                 options: {
                     responsive: true,
-                    scales: { y: { suggestedMin: -40, suggestedMax: 50 } },
-                    animation: { duration: 500 }
+                    scales: { y: { suggestedMin: -40, suggestedMax: 60 } },
+                    animation: { duration: 400 },
+                    plugins: { legend: { labels: { boxWidth: 10, font: { size: 11 } } } }
                 }
             });
 
             const sleep = (ms) => new Promise(r => setTimeout(r, ms));
 
-            status.innerText = "Step 1: 第一天发生了一件开心的事 (+40)...";
+            status.innerText = "Step 1: Day 1 发生好事 (+40)，开始线性衰减...";
             await sleep(800);
             demoChart.data.datasets[1].data = decay1;
             demoChart.update();
             
-            await sleep(1500);
-            status.innerText = "Step 2: 第四天发生了一件难过的事 (-30)...";
+            await sleep(1200);
+            status.innerText = "Step 2: Day 2 发生坏事 (-30)，开始指数衰减...";
             await sleep(800);
             demoChart.data.datasets[3].data = decay2;
             demoChart.update();
+
+            await sleep(1200);
+            status.innerText = "Step 3: Day 3 又有小确幸 (+20)，同样线性衰减...";
+            await sleep(800);
+            demoChart.data.datasets[5].data = decay3;
+            demoChart.update();
             
             await sleep(1500);
-            status.innerText = "Step 3: 卷积叠加！当下的心情是所有历史遗留影响的叠加和...";
+            status.innerText = "Final: 卷积叠加！当下的情感状态是所有历史响应的代数和。";
             await sleep(800);
-            demoChart.data.datasets[4].data = sum;
+            demoChart.data.datasets[6].data = sum;
             demoChart.update();
             
             await sleep(2000);
-            status.innerText = "演示完毕。你可以调整“记仇程度”后再次点击播放对比差异。";
+            status.innerText = "演示完毕。调整上方半衰期后再次播放，观察曲线交汇点的变化。";
             btn.disabled = false;
         }
 
@@ -406,7 +454,18 @@
             for (let i = 1; i <= currentDay; i++) {
                 if (historyImpacts[i]) {
                     let daysPassed = currentDay - i;
-                    let decayFactor = Math.exp(-daysPassed / (windowSize / 1.5));
+                    let decayFactor = 0;
+                    
+                    if (historyImpacts[i].impact > 0) {
+                        // 好事线性衰减：在 posHalfLife 减半 -> 在 2*posHalfLife 归零
+                        decayFactor = Math.max(0, 1 - daysPassed / (2 * posHalfLife));
+                    } else if (historyImpacts[i].impact < 0) {
+                        // 坏事指数衰减：(1/2)^(t / negHalfLife)
+                        decayFactor = Math.pow(0.5, daysPassed / negHalfLife);
+                    } else {
+                        decayFactor = 0;
+                    }
+                    
                     sum += historyImpacts[i].impact * decayFactor;
                 }
             }
@@ -414,7 +473,8 @@
         }
 
         function startSimulation() {
-            windowSize = parseInt(document.getElementById('grudge-level').value);
+            posHalfLife = parseFloat(document.getElementById('pos-decay').value);
+            negHalfLife = parseFloat(document.getElementById('neg-decay').value);
             autoPlayEnabled = document.getElementById('auto-play-toggle').checked;
             document.getElementById('setup-screen').style.display = 'none';
             document.getElementById('sim-screen').style.display = 'block';
@@ -572,7 +632,7 @@
             let displayLabels = Array.from({length: day - startIdx + 1}, (_, i) => `Day ${startIdx + i}`);
             let displayScores = scoreHistory.slice(startIdx);
             let displayImpacts = historyImpacts.slice(startIdx).map(e => e.impact);
-            if (isEnded) lineChart.data.datasets[0].label = '全局总分趋势复盘 (指数衰减曲线)';
+            if (isEnded) lineChart.data.datasets[0].label = '全局总分趋势复盘 (分属性衰减)';
             lineChart.data.labels = displayLabels;
             lineChart.data.datasets[0].data = displayScores;
             lineChart.update();
